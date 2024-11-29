@@ -11,6 +11,7 @@ import org.example.exeptions.NoLexemesFoundException;
 import org.example.exeptions.SyntaxAnalisisException;
 import org.example.lexical.LexicalAnalyzer;
 import org.example.polis.Command;
+import org.example.polis.PostfixEntry;
 import org.example.polis.PostfixList;
 import org.example.ui.LexemeTablePrinter;
 
@@ -26,6 +27,8 @@ public class SyntaxAnalyzer {
     private PostfixList postfixList;
     private int elseifOrElseIndex;
     private int endIndex;
+    private int countJMP = 0;
+    private int countJZ = 0;
 
     public boolean startAnalyze(String input) {
         try {
@@ -47,11 +50,13 @@ public class SyntaxAnalyzer {
     private void setJMP() {
         endIndex = postfixList.writeAddress(null);
         postfixList.writeCommand(Command.JMP);
+        countJMP++;
     }
 
     private void setJZ() {
         elseifOrElseIndex = postfixList.writeAddress(null);
         postfixList.writeCommand(Command.JZ);
+        countJZ++;
     }
 
     private void checkLexemesAvailable() {
@@ -63,16 +68,17 @@ public class SyntaxAnalyzer {
     private void checkIfElseifElseBlocks() {
         currentLexeme = lexemeIterator.next();
         checkIfStatement();
-        checkElseifElseBlocks();
+        checkElseIfStatements();
+        checkElseStatement();
     }
 
-    private void checkElseifElseBlocks() {
+    private void checkElseIfStatements() {
         if (currentLexeme.lexemeType() == LexemeType.ELSEIF) {
             checkElseIfStatement();
-        } else if (currentLexeme.lexemeType() == LexemeType.ELSE) {
-            checkElseStatement();
-        } else if(currentLexeme.lexemeType() != LexemeType.END) {
-            throw new InvalidLexemeException("end должно быть концом программы", currentLexeme.startIndex());
+        }else if(currentLexeme.lexemeType() == LexemeType.ELSE){
+            return;
+        } else{
+            throw new InvalidLexemeException("Ожидался elseif", currentLexeme.startIndex());
         }
     }
 
@@ -81,54 +87,30 @@ public class SyntaxAnalyzer {
             throw new InvalidLexemeException("Ожидался if", currentLexeme.startIndex());
         }
         checkCondition();
-        setJZ();
         checkThen();
         checkStatement();
-        postfixList.setAddress(elseifOrElseIndex, postfixList.getNextIndex());
-        checkEndAfterIfOrElseif();
+        checkEnd();
     }
 
     private void checkElseIfStatement() {
         checkCondition();
-        setJZ();
         checkThen();
         checkStatement();
-        setJMP();
-        postfixList.setAddress(elseifOrElseIndex, postfixList.getNextIndex());
-        checkEndAfterIfOrElseif();
-        checkElseifElseBlocks();
+        checkEnd();
+        checkElseIfStatements();
     }
 
     private void checkElseStatement() {
-        setJMP();
         checkStatement();
-        postfixList.setAddress(endIndex, postfixList.getNextIndex());
-        checkEndAfterElse();
+        checkEnd();
     }
 
-    private void checkEndAfterIfOrElseif() {
+    private void checkEnd() {
         if (lexemeIterator.hasNext()) {
             currentLexeme = lexemeIterator.next();
             if (currentLexeme.lexemeType() == LexemeType.END) {
                 if (lexemeIterator.hasNext()) {
                     throw new InvalidLexemeException("end должно быть концом программы", currentLexeme.startIndex());
-                }else{
-                    postfixList.setAddress(elseifOrElseIndex, postfixList.getNextIndex());
-                }
-            }
-        } else {
-            throw new InvalidLexemeException("Ожидалось ключевое слово end для завершения программы", currentLexeme.endIndex() + 1);
-        }
-    }
-
-    private void checkEndAfterElse() {
-        if (lexemeIterator.hasNext()) {
-            currentLexeme = lexemeIterator.next();
-            if (currentLexeme.lexemeType() == LexemeType.END) {
-                if (lexemeIterator.hasNext()) {
-                    throw new InvalidLexemeException("end должно быть концом программы", currentLexeme.startIndex());
-                }else{
-                    postfixList.setAddress(endIndex, postfixList.getNextIndex());
                 }
             }
         } else {
