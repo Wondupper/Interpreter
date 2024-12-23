@@ -11,12 +11,12 @@ import org.example.exeptions.NoLexemesFoundException;
 import org.example.exeptions.SyntaxAnalisisException;
 import org.example.lexical.LexicalAnalyzer;
 import org.example.polis.Command;
-import org.example.polis.PostfixEntry;
 import org.example.polis.PostfixList;
 import org.example.ui.LexemeTablePrinter;
 
 import java.util.ListIterator;
 import java.util.NoSuchElementException;
+import java.util.Stack;
 
 @RequiredArgsConstructor
 public class SyntaxAnalyzer {
@@ -25,10 +25,8 @@ public class SyntaxAnalyzer {
     private Lexeme currentLexeme;
     @Getter
     private PostfixList postfixList;
-    private int elseifOrElseIndex;
-    private int endIndex;
-    private int countJMP = 0;
-    private int countJZ = 0;
+    private final Stack<Integer> endIndexStack = new Stack<>();
+    private final Stack<Integer> elseifOrElseStack = new Stack<>();
 
     public boolean startAnalyze(String input) {
         try {
@@ -47,18 +45,6 @@ public class SyntaxAnalyzer {
         }
     }
 
-    private void setJMP() {
-        endIndex = postfixList.writeAddress(null);
-        postfixList.writeCommand(Command.JMP);
-        countJMP++;
-    }
-
-    private void setJZ() {
-        elseifOrElseIndex = postfixList.writeAddress(null);
-        postfixList.writeCommand(Command.JZ);
-        countJZ++;
-    }
-
     private void checkLexemesAvailable() {
         if (lexicalAnalyzer.getLexemes().isEmpty()) {
             throw new NoLexemesFoundException("Список лексем пуст");
@@ -66,55 +52,70 @@ public class SyntaxAnalyzer {
     }
 
     private void checkIfElseifElseBlocks() {
-        currentLexeme = lexemeIterator.next();
-        checkIfStatement();
-        checkElseIfStatements();
-        checkElseStatement();
-    }
-
-    private void checkElseIfStatements() {
-        if (currentLexeme.lexemeType() == LexemeType.ELSEIF) {
-            checkElseIfStatement();
-        }else if(currentLexeme.lexemeType() == LexemeType.ELSE){
-            return;
-        } else{
-            throw new InvalidLexemeException("Ожидался elseif", currentLexeme.startIndex());
-        }
-    }
-
-    private void checkIfStatement() {
+        goNextIfPossibleStart();
         if (currentLexeme.lexemeType() != LexemeType.IF) {
             throw new InvalidLexemeException("Ожидался if", currentLexeme.startIndex());
         }
+        checkIfStatement();
+        checkElseIfBlocks();
+        checkElseStatement();
+        checkEnd();
+    }
+
+    private void checkIfStatement() {
         checkCondition();
+        elseifOrElseStack.push(postfixList.writeAddress(null));
+        postfixList.writeCommand(Command.JZ);
         checkThen();
         checkStatement();
-        checkEnd();
+        endIndexStack.push(postfixList.writeAddress(null));
+        postfixList.writeCommand(Command.JMP);
+        postfixList.setAddress(elseifOrElseStack.pop(), postfixList.getNextIndex());
+        goNextIfPossibleEndAfterStart();
+    }
+
+    private void checkElseIfBlocks() {
+        if (currentLexeme.lexemeType() == LexemeType.ELSEIF) {
+            if (!elseifOrElseStack.isEmpty()) {
+                postfixList.setAddress(elseifOrElseStack.pop(), postfixList.getNextIndex());
+            }
+            checkElseIfStatement();
+        } else if (currentLexeme.lexemeType() != LexemeType.ELSE && currentLexeme.lexemeType() != LexemeType.END) {
+            throw new InvalidLexemeException("Ожидался elseif, else или end", currentLexeme.startIndex());
+        }
     }
 
     private void checkElseIfStatement() {
         checkCondition();
+        elseifOrElseStack.push(postfixList.writeAddress(null));
+        postfixList.writeCommand(Command.JZ);
         checkThen();
         checkStatement();
-        checkEnd();
-        checkElseIfStatements();
+        endIndexStack.push(postfixList.writeAddress(null));
+        postfixList.writeCommand(Command.JMP);
+        postfixList.setAddress(elseifOrElseStack.pop(), postfixList.getNextIndex());
+        goNextIfPossibleEndAfterStart();
+        checkElseIfBlocks();
     }
 
     private void checkElseStatement() {
-        checkStatement();
-        checkEnd();
+        if (currentLexeme.lexemeType() == LexemeType.ELSE) {
+            if (!elseifOrElseStack.isEmpty()) {
+                postfixList.setAddress(elseifOrElseStack.pop(), postfixList.getNextIndex());
+            }
+            checkStatement();
+        } else if (currentLexeme.lexemeType() != LexemeType.END) {
+            throw new InvalidLexemeException("Ожидался else или end", currentLexeme.startIndex());
+        }
+        goNextIfPossibleEndAfterStart();
     }
 
     private void checkEnd() {
         if (lexemeIterator.hasNext()) {
-            currentLexeme = lexemeIterator.next();
-            if (currentLexeme.lexemeType() == LexemeType.END) {
-                if (lexemeIterator.hasNext()) {
-                    throw new InvalidLexemeException("end должно быть концом программы", currentLexeme.startIndex());
-                }
-            }
-        } else {
-            throw new InvalidLexemeException("Ожидалось ключевое слово end для завершения программы", currentLexeme.endIndex() + 1);
+            throw new InvalidLexemeException("end должно быть концом программы", currentLexeme.startIndex());
+        }
+        while (!endIndexStack.isEmpty()) {
+            postfixList.setAddress(endIndexStack.pop(), postfixList.getNextIndex());
         }
     }
 
@@ -258,4 +259,20 @@ public class SyntaxAnalyzer {
         }
     }
 
+
+    private void goNextIfPossibleStart() {
+        if (lexemeIterator.hasNext()) {
+            currentLexeme = lexemeIterator.next();
+        } else {
+            throw new InvalidLexemeException("Ожидался if в начале программы", 0);
+        }
+    }
+
+    private void goNextIfPossibleEndAfterStart() {
+        if (lexemeIterator.hasNext()) {
+            currentLexeme = lexemeIterator.next();
+        } else {
+            throw new InvalidLexemeException("Ожидалось ключевое слово end для завершения программы", currentLexeme.endIndex() + 1);
+        }
+    }
 }
