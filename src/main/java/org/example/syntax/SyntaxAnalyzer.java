@@ -271,7 +271,8 @@ public class SyntaxAnalyzer {
     private void goNextIfPossibleEndAfterStart() {
         if (lexemeIterator.hasNext()) {
             currentLexeme = lexemeIterator.next();
-        } else {
+        }else if(currentLexeme.lexemeType() == LexemeType.END){}
+        else {
             throw new InvalidLexemeException("Ожидалось ключевое слово end для завершения программы", currentLexeme.endIndex() + 1);
         }
     }
