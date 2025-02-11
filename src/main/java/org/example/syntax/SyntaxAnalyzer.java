@@ -52,10 +52,6 @@ public class SyntaxAnalyzer {
     }
 
     private void checkIfElseifElseBlocks() {
-        goNextIfPossibleStart();
-        if (currentLexeme.lexemeType() != LexemeType.IF) {
-            throw new InvalidLexemeException("Ожидался if", currentLexeme.startIndex());
-        }
         checkIfStatement();
         checkElseIfBlocks();
         checkElseStatement();
@@ -63,6 +59,10 @@ public class SyntaxAnalyzer {
     }
 
     private void checkIfStatement() {
+        goNextIfPossibleStart();
+        if (currentLexeme.lexemeType() != LexemeType.IF) {
+            throw new InvalidLexemeException("Ожидался if", currentLexeme.startIndex());
+        }
         checkCondition();
         elseifOrElseStack.push(postfixList.writeAddress(null));
         postfixList.writeCommand(Command.JZ);
